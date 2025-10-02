@@ -90,6 +90,22 @@ const updateUserStatus = async (req, res) => {
     }
 }
 
+const getAllCustomers = async (req, res) => {
+    try {
+        const requestingUser = await users.findOne({ _id: await getObjString(req.headers.id), role: 1 });
+        if (!requestingUser) {
+            return res.status(404).send({ status: false, message: 'Un Authorized User', data: [] });
+        }
+        const customerData = await customers.find().sort({ createdAt: 1 });
+        if (!customerData || customerData.length === 0) {
+            return res.status(404).send({ status: false, message: 'No users found', data: [] });
+        }
+        return res.status(200).send({ status: true, message: 'All user data', data: customerData });
+    } catch (error) {
+        return res.status(500).send({ status: false, message: 'Server error', error: error.message });
+    }
+}
+
 const createAndUpdateOrder = async (req, res) => {
     try {
         const creator = await users.findOne({ _id: await getObjString(req.headers.id), isActive: true, isDeleted: false });
@@ -118,7 +134,16 @@ const createAndUpdateOrder = async (req, res) => {
             }
         } else if (reqData.type === "update") {
             await reqData.orders.map(async val => {
-                await customerOrders.findOneAndUpdate({ _id: await getObjString(val._id) }, { ...val })
+                if(val._id){
+                    await customerOrders.findOneAndUpdate({ _id: await getObjString(val._id) }, { ...val })
+                } else {
+                    val.user_kuri = reqData.kuri;
+                    val.created_by = req.headers.id;
+                    val.bill_no = reqData?.orders[0]?.bill_no;
+                    val.createdAt = reqData?.orders[0]?.createdAt
+                    val.updatedAt = reqData?.orders[0]?.createdAt
+                    await customerOrders.create(val)
+                }
             })
             return await res.status(200).send({ status: true, message: 'Order details updated successfully', data: null });
         } else {
@@ -150,7 +175,17 @@ const getOrdersWithId = async (req, res) => {
         }
         const userData = await customers.findOne({ kuri: req.query.kuri })
         const orders = await customerOrders.find({ bill_no: req.query.bill_no });
-        if (orders.length && userData) {
+        if (userData && !req.query.bill_no) {
+            const sendData = {
+                bill_no: req.query.bill_no,
+                kuri: userData.kuri,
+                user_name: userData.user_name,
+                phone_no: userData.phone_no,
+                address: userData.address,
+                orders: []
+            }
+            return await res.status(200).send({ status: true, message: 'Orders fetched successfully', data: sendData });
+        } else if (orders.length && userData) {
             const sendData = {
                 bill_no: req.query.bill_no,
                 kuri: userData.kuri,
@@ -287,6 +322,9 @@ const getAllOrdersRecords = async (req, res) => {
                     orders: 1,
                     overAllTotal: 1
                 }
+            },
+            {
+                $sort: { date: -1 }
             }
         ]);
         if (results) {
@@ -314,6 +352,10 @@ async function matchCondition(type, data) {
         match.bill_no = data.bill_no;
     }
 
+    if (data.phone_no) {
+        match.bill_no = data.phone_no;
+    }
+
     // date range filter if startDate / endDate provided
     if (data.startDate || data.endDate) {
         match.createdAt = {};
@@ -338,6 +380,7 @@ async function matchCondition(type, data) {
         case 'confirm':
             // confirmed ones
             match.isConfirmed = true;
+            match.washing = { $eq: null };
             break;
 
         // you can add more types like packing, delivery similarly
@@ -345,18 +388,158 @@ async function matchCondition(type, data) {
             // default is everything non‑deleted (and maybe you want both confirmed and non)
             match.isConfirmed = true;
             // only those with a washing or ironing or packing or delivery date (non-null)
-            if (type == 'ironing') {
-                match.wsStatus = { $eq: true }
+            if (type == 'washing') {
+                match.ironing = { $eq: null };
+            } else if (type == 'ironing') {
+                match.washing = { $ne: null };
+                match.packing = { $eq: null };
             } else if (type == 'packing') {
-                match.irnStatus = { $eq: true }
+                match.ironing = { $ne: null }
+                match.delivery = { $eq: null }
             } else {
-                match.pkStatus = { $eq: true }
+                match.packing = { $ne: null }
             }
-            match[type] = { $eq: null };
+            match.dlvStatus = false;
+            match[type] = { $ne: null };
             break;
     }
 
     return match;
+}
+
+const updateOrderStatus = async (req, res) => {
+    try {
+        const creator = await users.findOne({ _id: await getObjString(req.headers.id), isActive: true, isDeleted: false });
+        if (!creator) {
+            return await res.status(200).send({ status: false, message: 'Un authorized user', data: null });
+        }
+        const reqData = req.body;
+        let updateData;
+
+        if (reqData.type == 'confirm') {
+            if (reqData.type == 'confirm' && reqData.status == "move") {
+                if (reqData.item == 'all') {
+                    updateData = await customerOrders.updateMany({ isConfirmed: false, dlvStatus: false }, { isConfirmed: true, confirm: new Date() });
+                    if (updateData) return await res.status(200).send({ status: true, message: 'All orders confirmed successfully', data: null });
+                } else {
+                    updateData = await customerOrders.updateMany({ bill_no: Number(reqData.item), dlvStatus: false }, { isConfirmed: true });
+                    if (updateData) return await res.status(200).send({ status: true, message: 'Order confirmed successfully', data: null });
+                }
+            } else if (reqData.type == 'confirm' && reqData.status == "delete") {
+                if (reqData.item == 'all') {
+                    updateData = await customerOrders.updateMany({ isConfirmed: false, isDeleted: false, dlvStatus: false }, { isDeleted: true });
+                    if (updateData) return await res.status(200).send({ status: true, message: 'All orders deleted successfully', data: null });
+                } else {
+                    updateData = await customerOrders.updateMany({ bill_no: Number(reqData.item), dlvStatus: false }, { isDeleted: true });
+                    if (updateData) return await res.status(200).send({ status: true, message: 'Order confirmed successfully', data: null });
+                }
+            }
+        } else if (reqData.type == 'washing') {
+            if (reqData.item == 'all') {
+                updateData = await customerOrders.updateMany({ isConfirmed: true, isDeleted: false, dlvStatus: false }, { washing: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Orders moved to washing successfully', data: null });
+            } else {
+                updateData = await customerOrders.updateMany({ bill_no: reqData.item, dlvStatus: false }, { washing: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Order moved to washing successfully', data: null });
+            }
+        } else if (reqData.type == 'ironing') {
+            if (reqData.item == 'all') {
+                updateData = await customerOrders.updateMany({ isConfirmed: true, isDeleted: false, washing: { $ne: null }, dlvStatus: false }, { ironing: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Orders moved to ironing successfully', data: null });
+            } else {
+                updateData = await customerOrders.updateMany({ bill_no: reqData.item, dlvStatus: false }, { ironing: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Order moved to ironing successfully', data: null });
+            }
+        } else if (reqData.type == 'packing') {
+            if (reqData.item == 'all') {
+                updateData = await customerOrders.updateMany({ isConfirmed: true, isDeleted: false, ironing: { $ne: null }, dlvStatus: false }, { packing: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Orders moved to packing successfully', data: null });
+            } else {
+                updateData = await customerOrders.updateMany({ bill_no: reqData.item, dlvStatus: false }, { packing: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Order moved to packing successfully', data: null });
+            }
+        } else if (reqData.type == 'delivery') {
+            if (reqData.item == 'all') {
+                updateData = await customerOrders.updateMany({ isConfirmed: true, isDeleted: false, packing: { $ne: null }, dlvStatus: false }, { delivery: new Date() });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Orders moved to delivery successfully', data: null });
+            } else {
+                updateData = await customerOrders.updateMany({ bill_no: reqData.item, dlvStatus: false }, { delivery: new Date(), });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Order moved to delivery successfully', data: null });
+            }
+        } else {
+            if (reqData.item == 'all') {
+                updateData = await customerOrders.updateMany({ isConfirmed: true, isDeleted: false, delivery: { $ne: null }, dlvStatus: false }, { deliveryAt: new Date(), dlvStatus: true });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Orders moved to delivery successfully', data: null });
+            } else {
+                updateData = await customerOrders.updateMany({ bill_no: reqData.item, dlvStatus: false }, { deliveryAt: new Date(), dlvStatus: true });
+                if (updateData) return await res.status(200).send({ status: true, message: 'Order moved to delivery successfully', data: null });
+            }
+        }
+
+    } catch (err) {
+        return res.status(500).send({ status: false, message: 'Server error', data: error.message });
+    }
+}
+
+const particularCustmrOrder = async (req, res) => {
+    try {
+        const creator = await users.findOne({ _id: await getObjString(req.headers.id), isActive: true, isDeleted: false });
+        if (!creator) {
+            return await res.status(200).send({ status: false, message: 'Un authorized user', data: null });
+        }
+        let filterData = await matchCustomerOrder(req?.body);
+        if (filterData && filterData.length) {
+            return await res.status(200).send({ status: true, message: 'Orders fetched successfully', data: filterData });
+        } else {
+            return await res.status(200).send({ status: false, message: 'No Orders found', data: [] });
+        }
+    } catch (err) {
+        return res.status(500).send({ status: false, message: 'Server error', data: err.message });
+    }
+
+}
+
+async function matchCustomerOrder(res) {
+    const match = { user_kuri: res?.kuri };
+
+    if (res?.startDate || res?.endDate) {
+        match.createdAt = {};
+        if (startDate) match.createdAt.$gte = new Date(res?.startDate);
+        if (endDate) match.createdAt.$lte = new Date(res?.endDate);
+    }
+    const result = await customerOrders.aggregate([
+        { $match: match },
+
+        // Group by bill_no
+        {
+            $group: {
+                _id: "$bill_no",
+                kuri: { $first: "$user_kuri" },
+                createdAt: { $min: "$createdAt" },
+                deliveryAt: { $first: "$deliveryAt" },
+                dlvStatus: { $first: "$dlvStatus" },
+                total: { $sum: "$total" },
+            }
+        },
+
+        // Format output
+        {
+            $project: {
+                _id: 0,
+                kuri: 1,
+                bill_no: "$_id",
+                createdAt: 1,
+                deliveryAt: 1,
+                dlvStatus: 1,
+                total: 1,
+            }
+        },
+
+        // Optional: sort by createdAt or bill_no
+        { $sort: { createdAt: -1 } }
+    ]);
+
+    return result;
 }
 
 
@@ -371,5 +554,8 @@ export {
     createAndUpdateItems,
     getAllItems,
     getOrdersWithId,
-    getAllOrdersRecords
+    getAllOrdersRecords,
+    updateOrderStatus,
+    getAllCustomers,
+    particularCustmrOrder
 }

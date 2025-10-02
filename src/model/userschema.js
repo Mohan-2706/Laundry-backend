@@ -15,7 +15,7 @@ const customer = new mongoose.Schema({
     phone_no: { type: String },
     address: { type: String },
     created_by: { type: String },
-}, { timestamps: true })
+}, { timestamps: true });
 
 const customerOrder = new mongoose.Schema({
     user_kuri: { type: String },
@@ -28,15 +28,14 @@ const customerOrder = new mongoose.Schema({
     isSaved: { type: Boolean, default: true },
     isConfirmed: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
+    confirm: { type: Date, default: null },
     washing: { type: Date, default: null },
-    wsStatus: { type: Boolean, default: false },
     ironing: { type: Date, default: null },
-    irnStatus: { type: Boolean, default: false },
     packing: { type: Date, default: null },
-    pkStatus: { type: Boolean, default: false },
     delivery: { type: Date, default: null },
+    deliveryAt: { type: Date, default: null },
     dlvStatus: { type: Boolean, default: false },
-}, { timestamps: true })
+}, { timestamps: true });
 
 const item = new mongoose.Schema({
     item: String,
