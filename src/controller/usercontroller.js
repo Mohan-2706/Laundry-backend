@@ -273,6 +273,7 @@ const getAllOrdersRecords = async (req, res) => {
                     isDeleted: 1,
                     isSaved: 1,
                     isConfirmed: 1,
+                    confirm: 1,
                     created_by: 1,
                     washing: 1,
                     ironing: 1,
