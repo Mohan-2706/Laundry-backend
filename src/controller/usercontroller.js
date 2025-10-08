@@ -134,7 +134,7 @@ const createAndUpdateOrder = async (req, res) => {
             }
         } else if (reqData.type === "update") {
             await reqData.orders.map(async val => {
-                if(val._id){
+                if (val._id) {
                     await customerOrders.findOneAndUpdate({ _id: await getObjString(val._id) }, { ...val })
                 } else {
                     val.user_kuri = reqData.kuri;
@@ -422,7 +422,7 @@ const updateOrderStatus = async (req, res) => {
                     updateData = await customerOrders.updateMany({ isConfirmed: false, dlvStatus: false }, { isConfirmed: true, confirm: new Date() });
                     if (updateData) return await res.status(200).send({ status: true, message: 'All orders confirmed successfully', data: null });
                 } else {
-                    updateData = await customerOrders.updateMany({ bill_no: Number(reqData.item), dlvStatus: false }, { isConfirmed: true });
+                    updateData = await customerOrders.updateMany({ bill_no: Number(reqData.item), dlvStatus: false }, { isConfirmed: true, confirm: new Date() });
                     if (updateData) return await res.status(200).send({ status: true, message: 'Order confirmed successfully', data: null });
                 }
             } else if (reqData.type == 'confirm' && reqData.status == "delete") {
