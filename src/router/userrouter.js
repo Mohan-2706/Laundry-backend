@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { addUser, createAndUpdateItems, createAndUpdateOrder, getAllCustomers, getAllItems, getAllOrdersRecords, getAllUser, getOrdersWithId, getUserProfile, particularCustmrOrder, updateOrderStatus, updateUserStatus, userLogin } from '../controller/usercontroller.js'
+import { addUser, createAndUpdateItems, createAndUpdateOrder, createExpence, getAllCustomers, getAllDeliveryRecords, getAllExpence, getAllItems, getAllOrdersRecords, getAllUser, getOrdersWithId, getUserProfile, particularCustmrOrder, updateOrderStatus, updateUserStatus, userLogin } from '../controller/usercontroller.js'
 
 const router = Router();
 
@@ -16,5 +16,8 @@ router.get('/allItems', getAllItems);
 router.post('/getAllOrdersRecords', getAllOrdersRecords);
 router.post('/updateOrderStatus', updateOrderStatus);
 router.post('/particularCustmrOrder', particularCustmrOrder);
+router.post('/createExpence', createExpence);
+router.get('/getAllExpence', getAllExpence);
+router.post('/getAllDeliveryRecords', getAllDeliveryRecords);
 
 export default router;

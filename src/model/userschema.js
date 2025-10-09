@@ -43,9 +43,16 @@ const item = new mongoose.Schema({
     isDeleted: { type: Boolean, default: false }
 }, { timestamps: true });
 
+const expence = new mongoose.Schema({
+    items: String,
+    amount: Number,
+    isDeleted: { type: Boolean, default: false }
+}, { timestamps: true });
+
 const users = mongoose.model('user', user);
 const items = mongoose.model('item', item);
+const expences = mongoose.model('expence', expence);
 const customers = mongoose.model('customer', customer);
 const customerOrders = mongoose.model('customerOrder', customerOrder);
 
-export { users, items, customers, customerOrders }
+export { users, items, expences, customers, customerOrders }

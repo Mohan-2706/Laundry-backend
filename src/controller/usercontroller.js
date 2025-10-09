@@ -1,4 +1,4 @@
-import { customerOrders, customers, items, users } from "../model/userschema.js"
+import { customerOrders, customers, expences, items, users } from "../model/userschema.js"
 import { getObjString } from "../../server.js";
 
 const addUser = async (req, res) => {
@@ -92,7 +92,7 @@ const updateUserStatus = async (req, res) => {
 
 const getAllCustomers = async (req, res) => {
     try {
-        const requestingUser = await users.findOne({ _id: await getObjString(req.headers.id), role: 1 });
+        const requestingUser = await users.findOne({ _id: await getObjString(req.headers.id) });
         if (!requestingUser) {
             return res.status(404).send({ status: false, message: 'Un Authorized User', data: [] });
         }
@@ -115,6 +115,8 @@ const createAndUpdateOrder = async (req, res) => {
         const reqData = req.body;
         const bill_no = await randomNumberGenerate();
         if (reqData.type === "create") {
+            let existKuri = await customers.findOne({kuri:reqData.kuri});
+            if(existKuri) return await res.status(200).send({ status: false, message: 'Kuri is allready taken for other user', data: null });;
             const customerData = {
                 kuri: reqData.kuri,
                 user_name: reqData.user_name,
@@ -544,6 +546,153 @@ async function matchCustomerOrder(res) {
     return result;
 }
 
+const createExpence = async (req, res) => {
+    try {
+        const creator = await users.findOne({ _id: await getObjString(req.headers.id), isActive: true, isDeleted: false });
+        if (!creator) {
+            return await res.status(200).send({ status: false, message: 'Un authorized user', data: null });
+        }
+        if (req?.body?.items) {
+            await expences.create(req?.body);
+            return await res.status(200).send({ status: true, message: 'Expence created successfully', data: null });
+        }
+    } catch (error) {
+        return res.status(500).send({ status: false, message: 'Server error', error: error.message });
+    }
+}
+
+const getAllExpence = async (req, res) => {
+    try {
+        const creator = await users.findOne({ _id: await getObjString(req.headers.id), isActive: true, isDeleted: false });
+        if (!creator) {
+            return await res.status(200).send({ status: false, message: 'Un authorized user', data: null });
+        }
+        const allExpence = await expences.find({ isDeleted: false });
+        return await res.status(200).send({ status: true, message: 'Expence fetched successfully', data: allExpence });
+    } catch (error) {
+        return res.status(500).send({ status: false, message: 'Server error', data: error.message });
+    }
+};
+
+const getAllDeliveryRecords = async (req, res) => {
+
+    try {
+        const creator = await users.findOne({ _id: await getObjString(req.headers.id), isActive: true, isDeleted: false });
+        if (!creator) {
+            return await res.status(200).send({ status: false, message: 'Un authorized user', data: null });
+        }
+
+        const reqData = req?.body
+        let match = {};
+        if (reqData.kuri) {
+            match.user_kuri = reqData.kuri;
+        }
+        if (reqData.bill_no) {
+            match.bill_no = Number(reqData.bill_no);
+        }
+        match.deliveryAt = { $ne: null };
+        match.dlvStatus = { $eq: true };
+        const results = await customerOrders.aggregate([
+            {
+                $match: match
+                // you can also match date range/url params if needed
+            },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'user_kuri',
+                    foreignField: 'kuri',
+                    as: 'customerInfo'
+                }
+            },
+            { $unwind: '$customerInfo' },
+            {
+                $project: {
+                    dateOnly: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                    createdAt: 1,
+                    bill_no: 1,
+                    user_name: '$customerInfo.user_name',
+                    phone_no: '$customerInfo.phone_no',
+                    address: '$customerInfo.address',
+                    kuri: '$customerInfo.kuri',
+                    item: 1,
+                    amount: 1,
+                    quantity: 1,
+                    total: 1,
+                    isDeleted: 1,
+                    isSaved: 1,
+                    isConfirmed: 1,
+                    confirm: 1,
+                    created_by: 1,
+                    washing: 1,
+                    ironing: 1,
+                    packing: 1,
+                    delivery: 1,
+                    deliveryAt: 1,
+                    dlvStatus: 1
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        date: '$dateOnly',
+                        bill_no: '$bill_no',
+                        user_name: '$user_name',
+                        phone_no: '$phone_no',
+                        address: '$address',
+                        kuri: '$kuri'
+                    },
+                    orders: {
+                        $push: {
+                            item: '$item',
+                            amount: '$amount',
+                            quantity: '$quantity',
+                            total: '$total',
+                            isDeleted: '$isDeleted',
+                            isSaved: '$isSaved',
+                            isConfirmed: '$isConfirmed',
+                            createdBy: '$created_by',
+                            washing: '$washing',
+                            ironing: '$ironing',
+                            packing: '$packing',
+                            delivery: '$delivery',
+                            createdAt: '$createdAt',
+                            confirm: '$confirm',
+                            deliveryAt: '$deliveryAt',
+                            dlvStatus: '$dlvStatus',
+                        }
+                    },
+                    overAllTotal: { $sum: '$total' }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    date: '$_id.date',
+                    bill_no: '$_id.bill_no',
+                    user_name: '$_id.user_name',
+                    phone_no: '$_id.phone_no',
+                    address: '$_id.address',
+                    kuri: '$_id.kuri',
+                    orders: 1,
+                    overAllTotal: 1
+                }
+            },
+            {
+                $sort: { date: -1 }
+            }
+        ]);
+        if (results) {
+            return await res.status(200).send({ status: true, message: 'Items fetched successfully', data: results });
+        } else {
+            return await res.send({ status: false, message: 'No orders found', data: [] });
+        }
+
+    } catch (err) {
+        return res.status(500).send({ status: false, message: 'Server error', data: error.message });
+    }
+};
+
 
 
 export {
@@ -559,5 +708,8 @@ export {
     getAllOrdersRecords,
     updateOrderStatus,
     getAllCustomers,
-    particularCustmrOrder
+    particularCustmrOrder,
+    createExpence,
+    getAllExpence,
+    getAllDeliveryRecords
 }
