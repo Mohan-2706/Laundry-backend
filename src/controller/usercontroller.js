@@ -387,6 +387,10 @@ async function matchCondition(type, data) {
             match.washing = { $eq: null };
             break;
 
+        case 'all':
+            // all ones
+            break;
+
         // you can add more types like packing, delivery similarly
         default:
             // default is everything non‑deleted (and maybe you want both confirmed and non)
