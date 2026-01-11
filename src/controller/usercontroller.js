@@ -556,7 +556,11 @@ const createExpence = async (req, res) => {
         if (!creator) {
             return await res.status(200).send({ status: false, message: 'Un authorized user', data: null });
         }
-        if (req?.body?.items) {
+        if(req?.body?._id) {
+            const updateData = await expences.findOneAndUpdate({_id: await getObjString(req?.body?._id)},{items:req?.body?.items,amount:req?.body?.amount});
+            return await res.status(200).send({ status: true, message: 'Expence updated successfully', data: null });
+        }
+        if (!req?.body?._id && req?.body?.items) {
             await expences.create(req?.body);
             return await res.status(200).send({ status: true, message: 'Expence created successfully', data: null });
         }
