@@ -280,7 +280,8 @@ const getAllOrdersRecords = async (req, res) => {
                     washing: 1,
                     ironing: 1,
                     packing: 1,
-                    delivery: 1
+                    delivery: 1,
+                    deliveryAt: 1
                 }
             },
             {
@@ -308,7 +309,8 @@ const getAllOrdersRecords = async (req, res) => {
                             packing: '$packing',
                             delivery: '$delivery',
                             createdAt: '$createdAt',
-                            confirm: '$confirm'
+                            confirm: '$confirm',
+                            deliveryAt: '$deliveryAt'
                         }
                     },
                     overAllTotal: { $sum: '$total' }
